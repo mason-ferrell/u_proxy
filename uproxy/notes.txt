@@ -1,0 +1,87 @@
+PA3 notes:
+
+Most of the code for this project is pretty self-explanatory; however, there are a couple things worth mentioning.
+
+Synchronization:
+The majority of synchronization is based on the following readers/writers solution.
+
+Writer:
+wait(mutex)
+writers++
+signal(mutex)
+wait(wrt)
+write to cache
+signal(wrt)
+wait(mutex)
+writers--
+signal(mutex)
+
+
+Reader:
+wait(mutex)
+if(writers > 0):
+	signal(mutex)
+	wait(wrt)
+	wait(mutex)
+else if(readers==0):
+	signal(mutex)
+	wait(wrt)
+	wait(mutex)
+readers++
+signal(mutex)
+read from cache
+wait(mutex)
+readers--
+if(readers==0):
+	signal(wrt)
+signal(mutex)
+
+
+We enter the critical section for writing to the cache whenever our cleanup thread is deleting files from the cache,
+and when the cache_response() function adds files to the cache.
+
+The readers critical section is a bit more confusing: we enter the critical selection when searching for a file in the cache.
+If we do not find the file, we exit the critical section. If we do find the file, the critical section carries over until the end
+of send_cached_response()
+
+This solution can sometimes sequentialize the threads, as any writers that come after a set of readers will get access to the cache before new readers,
+and if writers and readers alternate quickly to take the cache, neither will experience starvation, but parallelization will be difficult.
+However, with no writers in the queue, all readers can read from the cache. Since the cleanup thread runs periodically and the purpose of
+caching is to avoid constantly grabbing server responses and writing them to the cache, this has worked well with my testing.
+
+The other use of synchronization using semaphores is when searching through the cache. The format of the end of the main proxy thread is as follows:
+
+wait(search_mutex)
+find_cache_entry()
+if entry exists:
+	signal(search_mutex)
+	do your thing
+else:
+	go to network, get response, cache it
+	signal(search_mutex)
+	
+By formatting things this way, if multiple clients ask for an uncached file at the same time, the proxy will reach out to the network for only one client.
+The proxy server will then use its cached response for the remaining clients. This is great for reducing network traffic; however, the use of a search mutex
+can seriously sequentialize the program if each thread is asking for an uncached file. The best solution I could find to this problem was to get rid of the
+search mutex entirely, which would still give correct results and parallelize better for multiple clients requesting an uncached file. However, the consequence
+of removing this mutex is that some clients will go to the network for the same file if they all ask for that file before caching. This seems to be an issue
+with a solution that can change drastically depending on the parameters of the problem at hand.
+
+
+Other notes:
+When testing against websites I know, everything worked as expected except for GET http://facebook.com/. I initially received a 301 Moved Permanently response,
+but then my code gets stuck at line 480. Print statemtents have not only shown this to be the exact line my program gets stuck on, but it also shows that the loop
+never continues; the PC is just stuck there. No other request I've tried to any other website for anything has done this. I've spent hours trying to figure it out,
+but I simply can't. If either of the instructors have a chance to look at it and might know what's up, I would love some feedback.
+
+The final thing worth noting is how the cache works. The cache is simply a directory created at the start of the program. Files in the cache are named based on the
+hash of their uri. To make sure no incorrect files are sent, each file in the cache has its corresponding uri as the first line. If a file is requested,
+and hashes to a cached file with different information, this will be caught and the request will go across the network. I considered writing a BST
+of linked lists to handle collisions, but with the hash function used having a pretty good distribution over 32 bits, the likelihood of a collision not only
+seemed low, but the extra processing power to maintain all that information seemed like more work than just failing to cache a file and going back to the network
+in the extremely rare case there was a collision.
+
+
+
+
+

@@ -1,0 +1,25 @@
+oo uproxy forwarding:
+	modules:
+	
+	client:
+		modules:
+		
+		send data to proxy
+		handled like in pa2
+	proxy:
+		receive data from clinet:
+			modules:
+			
+			accept connection
+			spawn thread to handle rest of parsing
+		send data to server:
+			modules:
+			
+			in thread, if request is valid, create new request
+			forward new request to server
+			
+		receive data from server:
+			modules:
+			
+			could possibly reuse code from client as it's now just two concurrent connections
+	server
